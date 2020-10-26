@@ -18,9 +18,7 @@ library(geojsonio)
 library(tmap)
 ```
 
-
 ```{r dataSetup}
-
 #load covid data from the UK Government Website
 COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
 
