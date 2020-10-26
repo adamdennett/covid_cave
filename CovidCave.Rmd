@@ -18,7 +18,11 @@ library(geojsonio)
 library(tmap)
 ```
 
+<<<<<<< HEAD
 ```{r dataSetup}
+=======
+```{r data setup}
+>>>>>>> 744714547010dee63e79e932c5ca3b880cfcd8e8
 #load covid data from the UK Government Website
 COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
 
@@ -29,6 +33,7 @@ COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOA
 #*it might be that a new re-coded column is created in the
 #*long tidy version of the data
 
+<<<<<<< HEAD
 
 #get some boundaries
 #super-generalised url to geojson
@@ -52,7 +57,7 @@ MSOA_COVID_Map <- UK_MSOA %>%
 
 ## First Test Map
 
-```{r quickMap, echo=FALSE}
+```{r quick map, echo=FALSE}
 #make a very quick and dirty interactive map of week 41
 tmap_mode("view")
 tm_shape(MSOA_COVID_Map) +
@@ -119,4 +124,42 @@ ggplot(data = MSOA_COVID_Map_Long,aes(fill=value_rank)) +
   geom_sf(color='transparent') +
   scale_fill_viridis_c(option = 'plasma')+
   facet_wrap(~name, nrow = 4)
+
+#get some boundaries
+#super-generalised url to geojson
+url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.geojson"
+
+#read those boundaries into an sf() object for plotting
+UK_MSOA <- geojson_sf(url)
+```
+
+### Joining boundaries and data together
+
+```{r map join}
+#join the MSOA boundaries to the data
+MSOA_COVID_Map <- UK_MSOA %>% 
+  merge(.,
+        COVID_MSOA,
+        by.x="MSOA11CD",
+        by.y="msoa11_cd")
+
+```
+
+## First Test Map
+
+```{r quick map, echo=FALSE}
+#make a very quick and dirty interactive map of week 41
+tmap_mode("view")
+tm_shape(MSOA_COVID_Map) +
+  tm_fill(col = "wk_41", style="jenks")
+```
+
+An alternative with ggplot2
+
+```{r}
+#here's a quick and dirty map with a continuous scale
+#using ggplot2
+ggplot(data = MSOA_COVID_Map,aes(fill=wk_41)) +
+  geom_sf(color='transparent') +
+  scale_fill_viridis_c(option = 'plasma')
 ```
