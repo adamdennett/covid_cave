@@ -18,11 +18,9 @@ library(geojsonio)
 library(tmap)
 ```
 
-<<<<<<< HEAD
+
 ```{r dataSetup}
-=======
-```{r data setup}
->>>>>>> 744714547010dee63e79e932c5ca3b880cfcd8e8
+
 #load covid data from the UK Government Website
 COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
 
@@ -32,8 +30,6 @@ COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOA
 #*which currently codes cases between 0-2
 #*it might be that a new re-coded column is created in the
 #*long tidy version of the data
-
-<<<<<<< HEAD
 
 #get some boundaries
 #super-generalised url to geojson
