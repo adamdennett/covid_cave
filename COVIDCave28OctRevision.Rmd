@@ -1,0 +1,52 @@
+---
+title: "COVIDCave28OctRevision"
+author: "Adam Dennett"
+date: "28/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(tmap)
+library(downloader)
+library(readxl)
+library(janitor)
+```
+
+# New COVID Case Data Maps
+
+## Get some COVID and Boundary Data:
+
+```{r}
+COVID_MSOA_Tidy <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
+
+#get some boundaries
+#super-generalised url to geojson
+url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.geojson"
+
+#read those boundaries into an sf() object for plotting
+UK_MSOA <- geojson_sf(url)
+```
+
+Joining boundaries and data together
+
+```{r mapJoin}
+#join the MSOA boundaries to the data
+COVID_MSOA_Tidy_Map <- UK_MSOA %>% 
+  merge(.,
+        COVID_MSOA_Tidy,
+        by.x="MSOA11CD",
+        by.y="areaCode")
+```
+
+## First Test Map
+
+```{r quickMap, echo=FALSE}
+#make a very quick and dirty interactive map of week 41
+tmap_mode("view")
+COVID_MSOA_Tidy_Map %>% filter(date == "2020-10-23") %>% 
+tm_shape() +
+  tm_fill(col = "newCasesBySpecimenDateRollingRate", style="jenks")
+```
