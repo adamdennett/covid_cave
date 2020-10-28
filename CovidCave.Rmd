@@ -120,4 +120,34 @@ ggplot(data = MSOA_COVID_Map_Long,aes(fill=value_rank)) +
   facet_wrap(~name, nrow = 4)
 ```
 
+## Calculating COVID Rates
 
+In order to calculate rates we need to determine a 'population at risk' of contracting COVID-19. For this disease, the population at risk is everyone. This isn't always the case - for example, if we were looking at dementia, we wouldn't include children in the population at risk.
+
+### Download population at risk data
+
+The Office for National Statistics create mid-year population estimates. We will download these in order to calculate our rates:
+
+```{r downloadPopData}
+library(downloader)
+library(readxl)
+library(janitor)
+
+url_msoa_pop_zip <- "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fmiddlesuperoutputareamidyearpopulationestimates%2fmid2019sape22dt4/sape22dt4mid2019msoasyoaestimatesunformatted.zip"
+
+#download from the URL
+download(url_msoa_pop_zip, dest="dataset.zip", mode="wb")
+
+#unzip into a new directory called data
+unzip("dataset.zip",exdir="./data")
+
+#get the file names from within the zip file
+filename <- list.files("./data")
+
+#read the sheet you want from the file
+msoa_pop <- read_excel(file.path("./data",filename), sheet="Mid-2019 Persons", skip = 3, col_names = T)
+
+msoa_pop <- clean_names(msoa_pop)
+
+summary(msoa_pop)
+```
