@@ -120,3 +120,4 @@ ggplot(data = MSOA_COVID_Map_Long,aes(fill=value_rank)) +
   facet_wrap(~name, nrow = 4)
 ```
 
+
