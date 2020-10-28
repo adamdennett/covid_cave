@@ -160,3 +160,12 @@ MSOA_COVID_Long <- left_join(MSOA_COVID_Long,
                               by = c("msoa11_cd" = "msoa_code"))
   
 ```
+
+Now create a new rate column:
+
+```{r covidRate}
+
+MSOA_COVID_Long <- MSOA_COVID_Long %>% 
+  mutate(case_rate = (value / all_ages)*100000)
+
+```
