@@ -11,6 +11,10 @@ output: html_document
 
 ### Setting Everything Up
 
+------------------------------------------------------------------------
+
+*Warning - this code has been superseded on 28th Oct as the government have now decided to release their weekly data in a new Tidy format!*
+
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(sf)
@@ -81,7 +85,8 @@ The data we want to plot starts from column 9 onwards therefore, pivot from colu
 ```{r pivotLong}
 MSOA_COVID_Long <- COVID_MSOA %>% 
   pivot_longer(.,
-               c(9:46))
+               c(9:length(COVID_MSOA)))
+
 ```
 
 Now re-merge the boundary geometries to the long file:
@@ -167,5 +172,12 @@ Now create a new rate column:
 
 MSOA_COVID_Long <- MSOA_COVID_Long %>% 
   mutate(case_rate = (value / all_ages)*100000)
+
+```
+
+Make a map of the last 7 days
+
+```{r}
+distinct(MSOA_COVID_Long$)
 
 ```
