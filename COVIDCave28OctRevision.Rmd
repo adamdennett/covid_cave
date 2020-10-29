@@ -17,7 +17,7 @@ library(janitor)
 
 # New COVID Case Data Maps
 
-## Get some COVID and Boundary Data:
+## Get some COVID-19 MSOA-level Case and Boundary Data:
 
 ```{r}
 COVID_MSOA_Tidy <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
@@ -30,7 +30,7 @@ url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.
 UK_MSOA <- geojson_sf(url)
 ```
 
-Joining boundaries and data together
+Join those boundaries and data together
 
 ```{r mapJoin}
 #join the MSOA boundaries to the data

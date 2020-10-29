@@ -38,14 +38,14 @@ COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOA
 url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.geojson"
 
 #read those boundaries into an sf() object for plotting
-UK_MSOA <- geojson_sf(url)
+UK_MSOA_sf <- geojson_sf(url)
 ```
 
 ### Joining boundaries and data together
 
 ```{r mapJoin}
 #join the MSOA boundaries to the data
-MSOA_COVID_Map <- UK_MSOA %>% 
+MSOA_COVID_Map <- UK_MSOA_sf %>% 
   merge(.,
         COVID_MSOA,
         by.x="MSOA11CD",
@@ -92,7 +92,7 @@ MSOA_COVID_Long <- COVID_MSOA %>%
 Now re-merge the boundary geometries to the long file:
 
 ```{r reMerge}
-MSOA_COVID_Map_Long <- UK_MSOA %>% 
+MSOA_COVID_Map_Long <- UK_MSOA_sf %>% 
   merge(.,
         MSOA_COVID_Long,
         by.x="MSOA11CD",
@@ -166,6 +166,14 @@ MSOA_COVID_Long <- left_join(MSOA_COVID_Long,
   
 ```
 
+Replace the -99 values with missing data
+
+```{r replaceValues}
+MSOA_COVID_Long <- MSOA_COVID_Long %>% 
+  mutate(value=na_if(value,-99))
+
+```
+
 Now create a new rate column:
 
 ```{r covidRate}
@@ -175,9 +183,20 @@ MSOA_COVID_Long <- MSOA_COVID_Long %>%
 
 ```
 
+```{r reMerge}
+MSOA_COVID_Map_Long <- UK_MSOA_sf %>% 
+  merge(.,
+        MSOA_COVID_Long,
+        by.x="MSOA11CD",
+        by.y="msoa11_cd")
+```
+
 Make a map of the last 7 days
 
-```{r}
-distinct(MSOA_COVID_Long$)
-
+```{r quickMap, echo=FALSE}
+#make a very quick and dirty interactive map of week 41
+tmap_mode("view")
+MSOA_COVID_Map_Long %>% filter(name == "latest_7_days") %>% 
+tm_shape() +
+  tm_fill(col = "case_rate", style="fisher")
 ```
