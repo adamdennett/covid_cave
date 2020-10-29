@@ -200,3 +200,62 @@ MSOA_COVID_Map_Long %>% filter(name == "latest_7_days") %>%
 tm_shape() +
   tm_fill(col = "case_rate", style="fisher")
 ```
+
+## MSOA Rates and Lockdown Tiers
+
+Get some lockdown tier data
+
+```{r tierData}
+
+la_lockdown_tiers <- read_csv("https://visual.parliament.uk/research/visualisations/coronavirus-restrictions-map/commonslibrary-coronavirus-restrictions-data.csv")
+
+spec(la_lockdown_tiers)
+```
+
+Pull out the national data from here:
+
+```{r pullOutNationalData}
+
+national_lockdown <- la_lockdown_tiers %>% 
+  filter(l_restrictions == "National")
+```
+
+Get some Local Authority Boundary Data
+
+```{r}
+
+
+#read those boundaries into an sf() object for plotting
+UK_lad_sf <- geojson_sf("https://opendata.arcgis.com/datasets/3b374840ce1b4160b85b8146b610cd0c_0.geojson")
+
+
+
+```
+
+Merge it with the LAD boundaries
+
+```{r}
+LAD_COVID_Restriction_Map <- left_join(UK_lad_sf, la_lockdown_tiers, by = c("LAD20CD"= "l_l_lockdownareacode"))
+```
+
+OK, now we have loads of empty rows, replace the values with national values
+
+```{r}
+temp_1 <- LAD_COVID_Restriction_Map %>% 
+  filter(is.na(l_l_widerlacode))
+temp_2 <- LAD_COVID_Restriction_Map %>% 
+  filter(!is.na(l_l_widerlacode))
+
+temp_1[,11:40] <- national_lockdown[3,1:30]
+
+#find the row where the value matching E is located in the l_country column
+which(!is.na(str_match(national_lockdown$l_Country, "E")))
+which(!is.na(str_match(national_lockdown$l_Country, "W")))
+which(!is.na(str_match(national_lockdown$l_Country, "S")))
+
+str_match(temp_1$LAD20CD,"^E")
+```
+
+```{r}
+names(national_lockdown)
+```
