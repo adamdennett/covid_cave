@@ -120,7 +120,7 @@ LAD_COVID_Restriction_Map1 <- rbind(temp_1E,temp_1W,temp_1S,temp_1N,temp_2)
 #names(national_lockdown)
 ```
 
-LAD Lockdown Map
+LAD Lockdown Map + MSOA-level rolling case counts
 
 ```{r}
 tmap_mode("view")
@@ -132,3 +132,30 @@ tm_shape(COVID_MSOA_Tidy_Map) +
   border.alpha = 0, col = "#bae4b3", clustering = T)
   
 ```
+
+## And we can make some faceted maps as well
+
+```{r}
+#now plot a faceted map using ggplot facet map
+ggplot(data = COVID_MSOA_Tidy_Map,aes(fill=newCasesBySpecimenDateRollingSum)) +
+  geom_sf(color='transparent') +
+  scale_fill_viridis_c(option = 'plasma')+
+  facet_wrap(~date)
+
+```
+
+```{r}
+#how about if we rank the data like Rich Harris did?
+range(COVID_MSOA_Tidy_Map$newCasesBySpecimenDateRollingRate)
+
+#create a new rank column
+COVID_MSOA_Tidy_Map$rate_rank <- rank(COVID_MSOA_Tidy_Map$newCasesBySpecimenDateRollingRate)
+
+#now plot a ranked faceted map using ggplot facet map
+#lets go for 4 rows this time like Rich did...
+ggplot(data = COVID_MSOA_Tidy_Map,aes(fill=rate_rank)) +
+  geom_sf(color='transparent') +
+  scale_fill_viridis_c(option = 'plasma')+
+  facet_wrap(~date, nrow = 4)
+```
+
