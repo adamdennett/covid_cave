@@ -49,3 +49,14 @@ MSOA_COVID_Map <- UK_MSOA_sf %>%
         by.y="areaCode")
 
 ```
+## First Test Map
+
+```{r quickMap, echo=FALSE}
+#make a very quick and dirty interactive map of week 41
+
+MSOA_COVID_Map_wk41<-MSOA_COVID_Map[MSOA_COVID_Map$week=="wk_41",]
+
+tmap_mode("view")
+tm_shape(MSOA_COVID_Map_wk41) +
+  tm_fill(col = "newCasesBySpecimenDateRollingSum", style="jenks")
+```
