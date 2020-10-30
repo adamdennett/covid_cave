@@ -1,0 +1,51 @@
+### This is the code for reading in the new tidy format coronavirus data
+
+### Setting Everything Up
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(tmap)
+```
+
+```{r dataSetup}
+#load covid data from the UK Government Website
+COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
+
+##replace NA valut to 0
+
+COVID_MSOA[is.na(COVID_MSOA)] <- 0
+
+#add in week number information according to date 
+COVID_MSOA$week<-paste("wk_",strftime(COVID_MSOA$date, format = "%V"),sep="")
+
+# test whetherthe week column is created right or wrong:40 (between 28 September and 4 October 2020)
+unique(COVID_MSOA[COVID_MSOA$week=="wk_40",]$date)
+
+#*Data Cleaning Task
+#*
+#*Think about how we could useful re-code -99 
+#*which currently codes cases between 0-2
+#*it might be that a new re-coded column is created in the
+#*long tidy version of the data
+
+#get some boundaries
+#super-generalised url to geojson
+url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.geojson"
+
+#read those boundaries into an sf() object for plotting
+UK_MSOA_sf <- geojson_sf(url)
+```
+
+### Joining boundaries and data together
+
+```{r mapJoin}
+#join the MSOA boundaries to the data
+MSOA_COVID_Map <- UK_MSOA_sf %>% 
+  merge(.,
+        COVID_MSOA,
+        by.x="MSOA11CD",
+        by.y="areaCode")
+
+```
