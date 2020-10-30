@@ -158,4 +158,3 @@ ggplot(data = COVID_MSOA_Tidy_Map,aes(fill=rate_rank)) +
   scale_fill_viridis_c(option = 'plasma')+
   facet_wrap(~date, nrow = 4)
 ```
-

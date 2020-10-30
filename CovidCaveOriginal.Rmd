@@ -1,0 +1,264 @@
+---
+title: "Covid Cave"
+author: "Adam Dennett"
+date: "26/10/2020"
+output: html_document
+---
+
+# Dr D's COVID Cave
+
+## Creating Some Faceted Maps
+
+### Setting Everything Up
+
+------------------------------------------------------------------------
+
+*Warning - this code has been superseded on 28th Oct as the government have now decided to release their weekly data in a new Tidy format!*
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(tmap)
+```
+
+```{r dataSetup}
+#load covid data from the UK Government Website
+COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
+
+#*Data Cleaning Task
+#*
+#*Think about how we could useful re-code -99 
+#*which currently codes cases between 0-2
+#*it might be that a new re-coded column is created in the
+#*long tidy version of the data
+
+#get some boundaries
+#super-generalised url to geojson
+url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.geojson"
+
+#read those boundaries into an sf() object for plotting
+UK_MSOA_sf <- geojson_sf(url)
+```
+
+### Joining boundaries and data together
+
+```{r mapJoin}
+#join the MSOA boundaries to the data
+MSOA_COVID_Map <- UK_MSOA_sf %>% 
+  merge(.,
+        COVID_MSOA,
+        by.x="MSOA11CD",
+        by.y="msoa11_cd")
+
+```
+
+## First Test Map
+
+```{r quickMap, echo=FALSE}
+#make a very quick and dirty interactive map of week 41
+tmap_mode("view")
+tm_shape(MSOA_COVID_Map) +
+  tm_fill(col = "wk_41", style="jenks")
+```
+
+An alternative with ggplot2
+
+```{r ggplotMap}
+#here's a quick and dirty map with a continuous scale
+#using ggplot2
+ggplot(data = MSOA_COVID_Map,aes(fill=wk_41)) +
+  geom_sf(color='transparent') +
+  scale_fill_viridis_c(option = 'plasma')
+```
+
+## Creating Some Faceted Maps
+
+Check the data looks OK first
+
+```{r CheckDataTypes}
+types <- sapply(MSOA_COVID_Map, class)
+```
+
+The data we want to plot starts from column 9 onwards therefore, pivot from column 9 onwards:
+
+```{r pivotLong}
+MSOA_COVID_Long <- COVID_MSOA %>% 
+  pivot_longer(.,
+               c(9:length(COVID_MSOA)))
+
+```
+
+Now re-merge the boundary geometries to the long file:
+
+```{r reMerge}
+MSOA_COVID_Map_Long <- UK_MSOA_sf %>% 
+  merge(.,
+        MSOA_COVID_Long,
+        by.x="MSOA11CD",
+        by.y="msoa11_cd")
+```
+
+Now plot a faceted map using ggplot facet map
+
+```{r facetMap}
+ggplot(data = MSOA_COVID_Map_Long,aes(fill=value)) +
+  geom_sf(color='transparent') +
+  scale_fill_viridis_c(option = 'plasma')+
+  facet_wrap(~name)
+```
+
+We could try ranging the data like Rich Harris did:
+
+```{r}
+range(MSOA_COVID_Map_Long$value)
+#create a new rank column
+MSOA_COVID_Map_Long$value_rank <- rank(MSOA_COVID_Map_Long$value)
+```
+
+Now plot a ranked faceted map using ggplot facet map and lets go for 4 rows this time like Rich did...
+
+```{r}
+ggplot(data = MSOA_COVID_Map_Long,aes(fill=value_rank)) +
+  geom_sf(color='transparent') +
+  scale_fill_viridis_c(option = 'plasma')+
+  facet_wrap(~name, nrow = 4)
+```
+
+## Calculating COVID Rates
+
+In order to calculate rates we need to determine a 'population at risk' of contracting COVID-19. For this disease, the population at risk is everyone. This isn't always the case - for example, if we were looking at dementia, we wouldn't include children in the population at risk.
+
+### Download population at risk data
+
+The Office for National Statistics create mid-year population estimates. We will download these in order to calculate our rates:
+
+```{r downloadPopData}
+library(downloader)
+library(readxl)
+library(janitor)
+
+url_msoa_pop_zip <- "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fmiddlesuperoutputareamidyearpopulationestimates%2fmid2019sape22dt4/sape22dt4mid2019msoasyoaestimatesunformatted.zip"
+
+#download from the URL
+download(url_msoa_pop_zip, dest="dataset.zip", mode="wb")
+
+#unzip into a new directory called data
+unzip("dataset.zip",exdir="./data")
+
+#get the file names from within the zip file
+filename <- list.files("./data")
+
+#read the sheet you want from the file
+msoa_pop <- read_excel(file.path("./data",filename), sheet="Mid-2019 Persons", skip = 3, col_names = T)
+
+msoa_pop <- clean_names(msoa_pop)
+
+```
+
+Now we can join this population at risk data to our COVID-19 case data. The following code chunk selects just the 'all_ages' column from the msoa_pop population data and joins it using left join to the pivoted 'tidy' long version of the COVID-19 case data:
+
+```{r mergePopData}
+
+MSOA_COVID_Long <- left_join(MSOA_COVID_Long,
+                              msoa_pop %>% select(msoa_code,all_ages),
+                              by = c("msoa11_cd" = "msoa_code"))
+  
+```
+
+Replace the -99 values with missing data
+
+```{r replaceValues}
+MSOA_COVID_Long <- MSOA_COVID_Long %>% 
+  mutate(value=na_if(value,-99))
+
+```
+
+Now create a new rate column:
+
+```{r covidRate}
+
+MSOA_COVID_Long <- MSOA_COVID_Long %>% 
+  mutate(case_rate = (value / all_ages)*100000)
+
+```
+
+```{r reMerge}
+MSOA_COVID_Map_Long <- UK_MSOA_sf %>% 
+  merge(.,
+        MSOA_COVID_Long,
+        by.x="MSOA11CD",
+        by.y="msoa11_cd")
+```
+
+Make a map of the last 7 days
+
+```{r quickMap, echo=FALSE}
+#make a very quick and dirty interactive map of week 41
+tmap_mode("view")
+MSOA_COVID_Map_Long %>% filter(name == "latest_7_days") %>% 
+tm_shape() +
+  tm_fill(col = "case_rate", style="fisher")
+```
+
+## MSOA Rates and Lockdown Tiers
+
+Get some lockdown tier data
+
+```{r tierData}
+
+la_lockdown_tiers <- read_csv("https://visual.parliament.uk/research/visualisations/coronavirus-restrictions-map/commonslibrary-coronavirus-restrictions-data.csv")
+
+spec(la_lockdown_tiers)
+```
+
+Pull out the national data from here:
+
+```{r pullOutNationalData}
+
+national_lockdown <- la_lockdown_tiers %>% 
+  filter(l_restrictions == "National")
+```
+
+Get some Local Authority Boundary Data
+
+```{r}
+
+
+#read those boundaries into an sf() object for plotting
+UK_lad_sf <- geojson_sf("https://opendata.arcgis.com/datasets/3b374840ce1b4160b85b8146b610cd0c_0.geojson")
+
+
+
+```
+
+Merge it with the LAD boundaries
+
+```{r}
+LAD_COVID_Restriction_Map <- left_join(UK_lad_sf, la_lockdown_tiers, by = c("LAD20CD"= "l_l_lockdownareacode"))
+```
+
+OK, now we have loads of empty rows, replace the values with national values
+
+```{r}
+temp_1 <- LAD_COVID_Restriction_Map %>% 
+  filter(is.na(l_l_widerlacode))
+temp_2 <- LAD_COVID_Restriction_Map %>% 
+  filter(!is.na(l_l_widerlacode))
+
+temp_1[str_detect(temp_1$LAD20CD,"^E"),11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30]
+
+#find the row where the value matching E is located in the l_country column
+which(!is.na(str_match(national_lockdown$l_Country, "E")))
+which(!is.na(str_match(national_lockdown$l_Country, "W")))
+which(!is.na(str_match(national_lockdown$l_Country, "S")))
+
+
+ifelse(str_detect(temp_1$LAD20CD,"^E"),national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30],"nope")
+
+str_detect(temp_1$LAD20CD,"^E")
+```
+
+```{r}
+names(national_lockdown)
+```
