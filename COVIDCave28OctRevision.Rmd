@@ -126,9 +126,9 @@ LAD Lockdown Map
 tmap_mode("view")
 
 tm_shape(LAD_COVID_Restriction_Map1) +
-  tm_fill(col = "l_tier", style = "cat", palette=c("#fd8d3c","#ffffb2","#bd0026"), alpha = 0.7) + 
+  tm_fill(col = "l_tier", style = "cat", palette=c("#fd8d3c","#ffffb2","#bd0026"), alpha = 0.7, popup.vars = "LAD20NM") + 
 tm_shape(COVID_MSOA_Tidy_Map) +
-  tm_dots(size = "newCasesBySpecimenDateRollingRate", alpha = 0.5,
-  border.alpha = 0, col = "#bae4b3")
+  tm_dots(size = "newCasesBySpecimenDateRollingSum", alpha = 0.5,
+  border.alpha = 0, col = "#bae4b3", clustering = T)
   
 ```
