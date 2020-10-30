@@ -1,0 +1,143 @@
+---
+title: "Covid Cave - Week 4 Project"
+author: "Isabella Brant"
+date: "28/10/2020"
+output: html_document
+---
+
+# Dr D's COVID Cave
+
+## Creating Some Faceted Maps
+
+### Setting Everything Up
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(tmap)
+```
+
+```{r dataSetup}
+
+#load covid data from the UK Government Website
+COVID_MSOA <- read_csv("https://coronavirus.data.gov.uk/downloads/msoa_data/MSOAs_latest.csv")
+
+## Creating a covid_msoa dataset for the week 2020-10-23
+COVID_MSOA_20201023 <- COVID_MSOA %>%
+  filter(str_detect(`date`, "2020-10-23"))
+
+#*Data Cleaning Task
+#*
+#*Think about how we could useful re-code -99 
+#*which currently codes cases between 0-2
+#*it might be that a new re-coded column is created in the
+#*long tidy version of the data
+#get some boundaries
+#super-generalised url to geojson
+url <- "https://opendata.arcgis.com/datasets/87aa4eb6393644768a5f85929cc704c2_0.geojson"
+#read those boundaries into an sf() object for plotting
+UK_MSOA <- geojson_sf(url)
+
+```
+
+### Joining boundaries and data together
+
+```{r mapJoin}
+
+#join the MSOA boundaries to the data
+MSOA_COVID_Map <- UK_MSOA %>% 
+  merge(.,
+        COVID_MSOA,
+        by.x="MSOA11CD",
+        by.y="areaCode")
+
+
+#join the MSOA boundaries to the 2020-10-23 data
+MSOA_COVID_Map_20201023 <- UK_MSOA %>% 
+  merge(.,
+        COVID_MSOA_20201023,
+        by.x="MSOA11CD",
+        by.y="areaCode")
+
+```
+
+## First Test Map
+
+```{r quickMap, echo=FALSE}
+
+#make a very quick and dirty interactive map of week/c 2020-10-23
+tmap_mode("view")
+tm_shape(MSOA_COVID_Map_20201023) +
+  tm_fill(col = "newCasesBySpecimenDateRollingSum", style="jenks")
+
+```
+
+## Calculating COVID Rates
+
+In order to calculate rates we need to determine a 'population at risk' of contracting COVID-19. For this disease, the population at risk is everyone. This isn't always the case - for example, if we were looking at dementia, we wouldn't include children in the population at risk.
+
+### Download population at risk data
+
+The Office for National Statistics create mid-year population estimates. We will download these in order to calculate our rates:
+
+```{r downloadPopData}
+
+library(downloader)
+library(readxl)
+library(janitor)
+url_msoa_pop_zip <- "https://www.ons.gov.uk/file?uri=%2fpeoplepopulationandcommunity%2fpopulationandmigration%2fpopulationestimates%2fdatasets%2fmiddlesuperoutputareamidyearpopulationestimates%2fmid2019sape22dt4/sape22dt4mid2019msoasyoaestimatesunformatted.zip"
+#download from the URL
+download(url_msoa_pop_zip, dest="dataset.zip", mode="wb")
+#unzip into a new directory called data
+unzip("dataset.zip",exdir="./data")
+#get the file names from within the zip file
+filename <- list.files("./data")
+#read the sheet you want from the file
+msoa_pop <- read_excel(file.path("./data",filename), sheet="Mid-2019 Persons", skip = 3, col_names = T)
+msoa_pop <- clean_names(msoa_pop)
+
+```
+
+Now we can join this population at risk data to our COVID-19 case data. The following code chunk selects just the 'all_ages' column from the msoa_pop population data and joins it using left join to the pivoted 'tidy' long version of the COVID-19 case data:
+
+```{r mergePopData}
+
+COVID_MSOA <- left_join(COVID_MSOA,
+                              msoa_pop %>% select(msoa_code,all_ages),
+                              by = c("areaCode" = "msoa_code"))
+
+
+## Creating a new column for covid rate per 100,000
+COVID_MSOA <- COVID_MSOA%>%
+  mutate(case_rate = (newCasesBySpecimenDateRollingSum / all_ages) * 100000)
+
+
+## Joining the updated COVID_MSOA data with UK_MSOA boundary data
+MSOA_COVID_Map_Case_Rate <- UK_MSOA %>% 
+  merge(.,
+        COVID_MSOA,
+        by.x="MSOA11CD",
+        by.y="areaCode")
+
+
+## Subsetting the COVID_MSOA for w/c 2020-10-23 inc case_rate
+COVID_MSOA_20201023_Case_Rate <- COVID_MSOA%>%
+  filter(str_detect(`date`, "2020-10-23"))
+
+
+## Joining the COVID_MSOA for w/c 2020-10-23 inc case_rate with UK_MSOA boundary data
+MSOA_COVID_Map_Case_Rate_20201023 <- UK_MSOA %>% 
+  merge(.,
+        COVID_MSOA_20201023_Case_Rate,
+        by.x="MSOA11CD",
+        by.y="areaCode")
+
+
+## Creating a map for case_rate per 100,000
+tmap_mode("view")
+tm_shape(MSOA_COVID_Map_Case_Rate_20201023) +
+  tm_fill(col = "case_rate", style="fisher")
+
+
+```
