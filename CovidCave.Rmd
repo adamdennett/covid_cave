@@ -246,14 +246,17 @@ temp_1 <- LAD_COVID_Restriction_Map %>%
 temp_2 <- LAD_COVID_Restriction_Map %>% 
   filter(!is.na(l_l_widerlacode))
 
-temp_1[,11:40] <- national_lockdown[3,1:30]
+temp_1[str_detect(temp_1$LAD20CD,"^E"),11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30]
 
 #find the row where the value matching E is located in the l_country column
 which(!is.na(str_match(national_lockdown$l_Country, "E")))
 which(!is.na(str_match(national_lockdown$l_Country, "W")))
 which(!is.na(str_match(national_lockdown$l_Country, "S")))
 
-str_match(temp_1$LAD20CD,"^E")
+
+ifelse(str_detect(temp_1$LAD20CD,"^E"),national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30],"nope")
+
+str_detect(temp_1$LAD20CD,"^E")
 ```
 
 ```{r}
