@@ -46,9 +46,9 @@ COVID_MSOA_Tidy_Map <- UK_MSOA %>%
 ```{r quickMap, echo=FALSE}
 #make a very quick and dirty interactive map of week 41
 tmap_mode("view")
-COVID_MSOA_Tidy_Map %>% filter(date == "2020-10-24") %>% 
+COVID_MSOA_Tidy_Map %>% filter(date == "2020-10-30") %>% 
 tm_shape() +
-  tm_fill(col = "newCasesBySpecimenDateRollingRate", style="fisher")
+  tm_fill(col = "newCasesBySpecimenDateRollingRate", style="fisher", alpha = 0.5)
 ```
 
 ## MSOA Rates and Lockdown Tiers
@@ -65,53 +65,49 @@ spec(la_lockdown_tiers)
 Pull out the national data from here:
 
 ```{r pullOutNationalData}
-
 national_lockdown <- la_lockdown_tiers %>% 
-  filter(l_restrictions == "National")
+  filter(restrictions == "National")
 ```
 
 Get some Local Authority Boundary Data
 
 ```{r}
-
-
 #read those boundaries into an sf() object for plotting
 #not generalised that much
 UK_lad_sf <- geojson_sf("https://opendata.arcgis.com/datasets/3b374840ce1b4160b85b8146b610cd0c_0.geojson")
 #generalised quite a lot
 #UK_lad_sf <- geojson_sf("https://opendata.arcgis.com/datasets/910f48f3c4b3400aa9eb0af9f8989bbe_0.geojson")
-
 ```
 
 Merge it with the LAD boundaries
 
 ```{r}
-LAD_COVID_Restriction_Map <- left_join(UK_lad_sf, la_lockdown_tiers, by = c("LAD20CD"= "l_l_lockdownareacode"), keep=T)
+LAD_COVID_Restriction_Map <- left_join(UK_lad_sf, la_lockdown_tiers, by = c("LAD20NM"= "laname"), keep=T)
 ```
 
 OK, now we have loads of empty rows, replace the local values with national values if empty - please fix this code for me!
 
 ```{r}
-temp_1 <- LAD_COVID_Restriction_Map %>% 
-  filter(is.na(l_l_widerlacode))
-temp_2 <- LAD_COVID_Restriction_Map %>% 
-  filter(!is.na(l_l_widerlacode))
+#temp_1 <- LAD_COVID_Restriction_Map %>% 
+ # filter(is.na(l_l_widerlacode))
+#temp_2 <- LAD_COVID_Restriction_Map %>% 
+ # filter(!is.na(l_l_widerlacode))
 
 #names(temp_1)
 #names(national_lockdown)
 
-temp_1[str_detect(temp_1$LAD20CD,"^E"),11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30]
-temp_1E <- temp_1[str_detect(temp_1$LAD20CD,"^E"),]
-temp_1W <- temp_1[str_detect(temp_1$LAD20CD,"^W"),]
-temp_1S <- temp_1[str_detect(temp_1$LAD20CD,"^S"),]
-temp_1N <- temp_1[str_detect(temp_1$LAD20CD,"^N"),]
+#temp_1[str_detect(temp_1$LAD20CD,"^E"),11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30]
+#temp_1E <- temp_1[str_detect(temp_1$LAD20CD,"^E"),]
+#temp_1W <- temp_1[str_detect(temp_1$LAD20CD,"^W"),]
+#temp_1S <- temp_1[str_detect(temp_1$LAD20CD,"^S"),]
+#temp_1N <- temp_1[str_detect(temp_1$LAD20CD,"^N"),]
 
-temp_1E[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30]
-temp_1W[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "W"))),1:30]
-temp_1S[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "S"))),1:30]
-temp_1N[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "N"))),1:30]
+#temp_1E[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "E"))),1:30]
+#temp_1W[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "W"))),1:30]
+#temp_1S[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "S"))),1:30]
+#temp_1N[,11:40] <- national_lockdown[which(!is.na(str_match(national_lockdown$l_Country, "N"))),1:30]
 
-LAD_COVID_Restriction_Map1 <- rbind(temp_1E,temp_1W,temp_1S,temp_1N,temp_2)
+#LAD_COVID_Restriction_Map1 <- rbind(temp_1E,temp_1W,temp_1S,temp_1N,temp_2)
 
 #find the row where the value matching E is located in the l_country column
 #which(!is.na(str_match(national_lockdown$l_Country, "E")))
@@ -157,4 +153,14 @@ ggplot(data = COVID_MSOA_Tidy_Map,aes(fill=rate_rank)) +
   geom_sf(color='transparent') +
   scale_fill_viridis_c(option = 'plasma')+
   facet_wrap(~date, nrow = 4)
+```
+
+We can now have a look at COVID case rates for MSOAs over time
+
+```{r COVIDOverTime}
+
+Leeds_sub <- filter(COVID_MSOA_Tidy, areaCode == "E02006861")
+
+plot1 <- ggplot(Leeds_sub, aes(date, newCasesBySpecimenDateRollingSum))
+plot1 + geom_point() + geom_smooth(span=0.3)
 ```
