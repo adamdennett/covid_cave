@@ -157,6 +157,33 @@ ggplot(data = COVID_MSOA_Tidy_Map,aes(fill=rate_rank)) +
 
 We can now have a look at COVID case rates for MSOAs over time
 
+```{r subsetByDistrict}
+#Pick a district of interest - first step, get the centroids of the MSOAs
+MSOA_centroids_Long <- st_centroid(COVID_MSOA_Tidy_Map) %>% st_transform(27700)
+summary(MSOA_centroids_Long)
+
+#now pick an area
+Leeds <- filter(UK_lad_sf, LAD20NM=="Leeds") %>% st_transform(27700)
+summary(Leeds)
+
+#now select the MSOAs that fall in that area
+MSOAs_in_Leeds <- MSOA_centroids_Long %>% st_intersection(Leeds, MSOA_centroids_Long)
+
+plot(MSOAs_in_Leeds)
+```
+
+```{r}
+#now we can plot cases by MSOA within the larger area
+plot1 <- ggplot(MSOAs_in_Leeds, aes(date, newCasesBySpecimenDateRollingSum, group=areaName,col=areaName)) + geom_line()
+plot1 
+```
+
+```{r}
+#or try as a facet plot
+plot1 <- ggplot(MSOAs_in_Leeds, aes(date, newCasesBySpecimenDateRollingSum)) + geom_line() + facet_wrap(~areaName)
+plot1 
+```
+
 ```{r COVIDOverTime}
 
 Leeds_sub <- filter(COVID_MSOA_Tidy, areaCode == "E02006861")
