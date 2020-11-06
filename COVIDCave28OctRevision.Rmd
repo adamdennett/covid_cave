@@ -167,7 +167,7 @@ Leeds <- filter(UK_lad_sf, LAD20NM=="Leeds") %>% st_transform(27700)
 summary(Leeds)
 
 #now select the MSOAs that fall in that area
-MSOAs_in_Leeds <- MSOA_centroids_Long %>% st_intersection(Leeds, MSOA_centroids_Long)
+MSOAs_in_Leeds <- st_intersection(Leeds, MSOA_centroids_Long)
 
 plot(MSOAs_in_Leeds)
 ```
