@@ -1,0 +1,381 @@
+---
+title: "COVID Vaccine Analysis"
+author: "Adam Dennett"
+date: "14/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(tmap)
+library(downloader)
+library(readxl)
+library(janitor)
+library(mapsf)
+library(purrr)
+library(here)
+library(mapsf)
+library(biscale)
+library(cowplot)
+library(viridis)
+library(curl)
+```
+
+Several Data Download Stages. 
+
+Stage 1 - Populations ("at Risk" of vaccination)
+
+```{r cars}
+#Get the latest MSOA population data from the ONS
+
+url <- "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/middlesuperoutputareamidyearpopulationestimates/mid2019sape22dt4/sape22dt4mid2019msoasyoaestimatesunformatted.zip"
+path_zip <- "C:/Users/Adam/OneDrive - University College London/GIS2020_21/covid_cave"
+path_unzip <- "C:/Users/Adam/OneDrive - University College London/GIS2020_21/covid_cave/vaccine"
+destfile <- "dataset.zip"
+
+# download zip
+curl_download(url, destfile = paste(path_zip, destfile, sep = "/"))
+
+#unzip into a new directory called data
+unzip("dataset.zip",exdir="./vaccine")
+
+#get the file names from within the zip file
+filename <- list.files("./vaccine")
+
+#read the sheet you want from the file
+msoa_pop <- read_excel(file.path("./vaccine",filename), sheet="Mid-2019 Persons", skip = 3, col_names = T)
+
+#sort the headers out
+msoa_pop <- clean_names(msoa_pop)
+
+#create some age groups to match those in the vaccination data
+msoa_pop <- msoa_pop %>% 
+  mutate(xUnder_60 = rowSums(across(x0:x59))) %>%
+  mutate(x60_64 = rowSums(across(x60:x64))) %>% 
+  mutate(x65_69 = rowSums(across(x65:x69))) %>% 
+  mutate(x70_74 = rowSums(across(x70:x74))) %>% 
+  mutate(x75_79 = rowSums(across(x75:x79))) %>% 
+  mutate(x80_plus = rowSums(across(x80:x90))) %>% 
+  mutate(x60_plus = rowSums(across(x60:x90)))
+
+#add some labels
+msoa_pop_grp <- msoa_pop[,c("msoa_code", "msoa_name", "xUnder_60", "x60_64", "x65_69", "x70_74", "x75_79", "x80_plus", "x60_plus")]
+
+#create a total
+msoa_pop_grp <- msoa_pop_grp %>% 
+  mutate(total = rowSums(across(xUnder_60:x80_plus))) %>% 
+  arrange(by_group = msoa_code) %>% 
+  #add column totals too? not sure. OK, will do it. 
+  adorn_totals()
+
+```
+
+Create a look-up table from LSOAs to MSOAs to build a hacky MSOA deprivation index from.
+
+```{r}
+LUT <- geojson_sf("https://opendata.arcgis.com/datasets/a46c859088a94898a7c462eeffa0f31a_0.geojson")
+
+LSOA_to_MSOA <- LUT[,5:8]
+LSOA_to_MSOA <- st_drop_geometry(LSOA_to_MSOA)
+LSOA_to_MSOA <- LSOA_to_MSOA %>% 
+  distinct(.,LSOA11CD, .keep_all = T)
+
+```
+
+Stage 2 - Get some Deprivation Data from the latest English Indices of Deprivation
+
+```{r}
+#urgh, helpfully the government have put the data on the web in excel files rather than csv's and I've not figured out how to download excels directly from the web so a missing stage here which is download the IMD SCORE not rank file from here - https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019 
+
+IMD <- read_excel("File_5_-_IoD2019_Scores.xlsx", sheet="IoD2019 Scores", col_names =T) %>% 
+  clean_names()
+IMD <- IMD %>% left_join(LSOA_to_MSOA, by = c("lsoa_code_2011" = "LSOA11CD"))
+
+MSOA_IMD <- IMD %>% 
+  group_by(.,MSOA11CD) %>% 
+  summarise(IMD_avg = mean(index_of_multiple_deprivation_imd_score))
+
+```
+
+## Stage 3 - Get the latest COVID vaccine data from the NHS
+
+```{r}
+#Oh great the NHS are storing their data as excels too - argh! OK, we'll have to work with it. Here's the web link to the latest data - https://www.england.nhs.uk/statistics/statistical-work-areas/covid-19-vaccinations/ 
+
+#Here I'm going to take take the latest weekly file from March 11th as it has MSOAs in it. #lots of junk in the excel, but fortuntely read_excel has lots of nice options to edit that out 
+
+#read the file
+msoa_vaccine <- read_excel("COVID-19-weekly-announced-vaccinations-11-March-2021.xlsx", sheet="MSOA", skip = 15, col_names = c("region_code", "region_name", "ltla_code", "ltla_name", "msoa_code", "msoa_name", "xUnder_60", "x60_64", "x65_69", "x70_74", "x75_79", "x80_plus"), n_max = 6791)
+
+#add some new columns with groups
+msoa_vaccine <- msoa_vaccine %>% 
+  mutate(x60_plus = rowSums(across(x60_64:x80_plus))) %>% 
+  mutate(total = rowSums(across(xUnder_60:x80_plus))) %>% 
+  arrange(by_group = msoa_code) %>% 
+  adorn_totals()
+
+```
+
+## Stage 4 - Generate some age-specific vaccination rates
+
+Now, these aren
+
+```{r}
+#now for some rates
+
+msoa_vaccine <- msoa_vaccine %>% 
+  mutate(xUnder_60_prop = xUnder_60/total) %>%
+  mutate(x60_64_prop = x60_64/total) %>% 
+  mutate(x65_69_prop = x65_69/total) %>% 
+  mutate(x70_74_prop = x70_74/total) %>% 
+  mutate(x75_79_prop = x75_79/total) %>% 
+  mutate(x80_plus_prop = x80_plus/total) %>% 
+  mutate(x60_plus_prop = x60_plus/total)
+
+msoa_vaccine[6792,5] <- "Total"
+
+msoa_pop_grp <- msoa_pop_grp %>% 
+  mutate(xUnder_60_prop = xUnder_60/total) %>%
+  mutate(x60_64_prop = x60_64/total) %>% 
+  mutate(x65_69_prop = x65_69/total) %>% 
+  mutate(x70_74_prop = x70_74/total) %>% 
+  mutate(x75_79_prop = x75_79/total) %>% 
+  mutate(x80_plus_prop = x80_plus/total )%>% 
+  mutate(x60_plus_prop = x60_plus/total)
+
+full_vaccine_pop <- left_join(msoa_vaccine, msoa_pop_grp, by = c("msoa_code" = "msoa_code"), suffix = c(".vac", ".pop"))
+
+full_vaccine_pop <- full_vaccine_pop %>% 
+  mutate(xUnder_60_rate = xUnder_60.vac/xUnder_60.pop) %>%
+  mutate(x60_64_rate = x60_64.vac/x60_64.pop) %>% 
+  mutate(x65_69_rate = x65_69.vac/x65_69.pop) %>% 
+  mutate(x70_74_rate = x70_74.vac/x70_74.pop) %>% 
+  mutate(x75_79_rate = x75_79.vac/x75_79.pop) %>% 
+  mutate(x80_plus_rate = x80_plus.vac/x80_plus.pop) %>% 
+  mutate(x60_plus_rate = x60_plus.vac/x60_plus.pop)
+
+full_vaccine_pop_a <- full_vaccine_pop[1:6791,]
+
+sum(full_vaccine_pop_a$xUnder_60.vac)
+
+full_vaccine_pop_a <- full_vaccine_pop_a %>% 
+  mutate(xLQ_60_plus_vacc_rate = x60_plus_rate/(sum(x60_plus.vac)/sum(x60_plus.pop))) 
+
+full_vaccine_pop_a <- full_vaccine_pop_a %>% 
+  left_join(MSOA_IMD, by = c("msoa_code" = "MSOA11CD"))
+
+```
+
+
+```{r}
+#str(full_vaccine_pop)
+#colnames(full_vaccine_pop)
+
+region <- full_vaccine_pop_a %>% 
+  group_by(region_name) %>% 
+  summarise(
+    region_code = first(region_code),
+    region_name = first(region_name),
+    ltla_code = first(ltla_code),
+    ltla_name = first(ltla_name),
+    msoa_code = first(msoa_code),
+    msoa_name.vac = first(msoa_name.vac),
+    xUnder_60.vac = sum(xUnder_60.vac),
+    x60_64.vac = sum(x60_64.vac), 
+    x65_69.vac = sum(x65_69.vac), 
+    x70_74.vac = sum(x70_74.vac), 
+    x75_79.vac = sum(x75_79.vac), 
+    x80_plus.vac = sum(x80_plus.vac), 
+    x60_plus.vac = sum(x60_plus.vac), 
+    total.vac = sum(total.vac),   
+    xUnder_60_prop.vac = mean(xUnder_60_prop.vac), 
+    x60_64_prop.vac = mean(x60_64_prop.vac), 
+    x65_69_prop.vac = mean(x65_69_prop.vac), 
+    x70_74_prop.vac = mean(x70_74_prop.vac), 
+    x75_79_prop.vac = mean(x75_79_prop.vac), 
+    x80_plus_prop.vac = mean(x80_plus_prop.vac), 
+    x60_plus_prop.vac = mean(x60_plus_prop.vac), 
+    msoa_name.pop = first(msoa_name.pop),
+    xUnder_60.pop = sum(xUnder_60.pop), 
+    x60_64.pop = sum(x60_64.pop), 
+    x65_69.pop = sum(x65_69.pop), 
+    x70_74.pop = sum(x70_74.pop), 
+    x75_79.pop = sum(x75_79.pop), 
+    x80_plus.pop = sum(x80_plus.pop), 
+    x60_plus.pop = sum(x60_plus.pop), 
+    total.pop = sum(total.pop), 
+    xUnder_60_prop.pop = mean(xUnder_60_prop.pop),  
+    x60_64_prop.pop = mean(x60_64_prop.pop), 
+    x65_69_prop.pop = mean(x65_69_prop.pop), 
+    x70_74_prop.pop = mean(x70_74_prop.pop),  
+    x75_79_prop.pop = mean(x75_79_prop.pop), 
+    x80_plus_prop.pop = mean(x80_plus_prop.pop), 
+    x60_plus_prop.pop = mean(x60_plus_prop.pop),  
+    xUnder_60_rate = mean(xUnder_60_rate),     
+    x60_64_rate = mean(x60_64_rate),       
+    x65_69_rate = mean(x65_69_rate),     
+    x70_74_rate = mean(x70_74_rate),     
+    x75_79_rate = mean(x75_79_rate),   
+    x80_plus_rate = mean(x80_plus_rate), 
+    x60_plus_rate = mean(x60_plus_rate),
+    xLQ_60_plus_vacc_rate = mean(xLQ_60_plus_vacc_rate)
+  ) 
+```
+
+
+
+```{r}
+url <- "https://opendata.arcgis.com/datasets/80223f1d571c405fb2fdf719c7e6da13_0.geojson"
+
+#read those boundaries into an sf() object for plotting
+UK_MSOA_sf <- geojson_sf(url)
+```
+
+```{r}
+ew_biscale <- UK_MSOA_sf %>% 
+  merge(., full_vaccine_pop_a, 
+        by.x="MSOA11CD", 
+        by.y="msoa_code")
+
+ew_biscale <- ew_biscale %>% 
+  mutate(log_IMD = log(IMD_avg))
+
+data <- bi_class(ew_biscale, x = x60_plus_rate, y = log_IMD, style = "fisher", dim = 3)
+
+# create map
+map <- ggplot() +
+  geom_sf(data = data, mapping = aes(fill = bi_class), color = NA, size = 0.1, show.legend = F) +
+  bi_scale_fill(pal = "DkCyan", dim = 3) +
+  bi_theme()
+
+legend <- bi_legend(pal = "DkCyan",
+                    dim = 3,
+                    xlab = "Over 60 Vaccination Rate",
+                    ylab = "Deprivation (IMD Average)",
+                    size = 5)
+
+# combine map with legend
+finalPlot <- ggdraw() +
+  draw_plot(map, 0, 0, 1, 1) +
+  draw_plot(legend, 0.2, 0.4, 0.2, 0.2)
+
+finalPlot
+
+ggsave2("covid_plot.png",finalPlot, dpi = 1000)
+```
+
+```{r}
+
+#x60_plus_rate
+#xLQ_60_plus_vacc_rate
+
+ggplot(ew_biscale, aes(x60_plus_rate, log(IMD_avg))) + 
+  geom_point(aes(colour=region_name)) + 
+  facet_wrap(vars(region_name))
+
+ew_biscale %>% filter(region_name == "London") %>% 
+  ggplot(aes(xLQ_60_plus_vacc_rate, log(IMD_avg))) + 
+  geom_point(aes(colour=region_name))
+
+ew_biscale %>% filter(region_name == "London") %>% 
+  ggplot(aes(xLQ_60_plus_vacc_rate, log(IMD_avg))) + 
+  geom_point(aes(colour=region_name))
+
+```
+
+
+```{r}
+ggplot(ew_biscale, aes(x60_plus_rate)) + 
+  geom_histogram()
+
+ggplot(ew_biscale, aes(xLQ_60_plus_vacc_rate)) + 
+  geom_histogram()
+
+ggplot(ew_biscale, aes(log(IMD_avg))) + 
+  geom_histogram()
+
+
+```
+
+
+
+```{r}
+tmap_mode("view")
+tm_shape(ew_biscale) +
+  tm_polygons("xLQ_60_plus_vacc_rate", 
+    palette = "-plasma",
+    alpha = 0.7, 
+    border.col = NA,
+    border.alpha = 0
+  )
+
+```
+
+
+
+
+
+
+
+
+```{r pressure, echo=FALSE}
+brent <- full_vaccine_pop_a %>% 
+  filter(ltla_code == "E09000005")
+```
+
+```{r}
+brent_sf <- UK_MSOA_sf %>% 
+  merge(., brent, 
+        by.x="MSOA11CD", 
+        by.y="msoa_code")
+
+bks <- round(mf_get_breaks(x = brent$xLQ_60_plus_vacc_rate,
+                           nbreaks = 6,
+                           breaks = "jenks"), 
+             digits = 4)
+
+brks <- c(0.65, 0.85, 0.95, 1, 1.05, 1.15, 1.25)
+pal <- hcl.colors(n = 7, palette = "Cividis")
+
+th <- mf_theme("darkula")
+
+mf_init(brent_sf, theme = "darkula", expandBB = c(0,0,0.05,0),
+        export = "png", 
+        filename = "inset3.png", width = 460, 
+        res = 96)
+mf_map(
+  x = brent_sf, 
+  var = "xLQ_60_plus_vacc_rate",
+  type = "choro", 
+  breaks = brks,
+  nbreaks = 7,
+  pal = pal,
+  border = "white",
+  lwd = 0.5,
+  leg_pos = "topleft", 
+  leg_title = "Vaccine LQ"
+  )
+
+
+mf_inset_on( fig = c(0.75, .95, 0.84, .99))
+par(mar = c(0,0,1.7,0))
+hist(brent$xLQ_60_plus_vacc_rate, breaks = brks, col = pal, 
+     border = th$fg,
+     axes = T, labels = "", xlab="", ylab = "", 
+     main ="")
+axis(side = 1, at = brks, las = 2,
+     tick = FALSE, line = -.9, 
+     cex.axis = .7, col.axis = th$fg)
+title("Median Income\nin euros", cex.main = .8, 
+      col.main = th$fg, font.main = 1, 
+      adj = c(0))
+mf_inset_off()
+
+```
+
+```{r}
+
+```
+
