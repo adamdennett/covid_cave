@@ -23,9 +23,9 @@ library(viridis)
 library(curl)
 ```
 
-Several Data Download Stages. 
+# Data Download, Cleaning and Initial Processing
 
-Stage 1 - Populations ("at Risk" of vaccination)
+## Stage 1 - Populations ("at Risk" of vaccination)
 
 ```{r cars}
 #Get the latest MSOA population data from the ONS
@@ -84,7 +84,9 @@ LSOA_to_MSOA <- LSOA_to_MSOA %>%
 
 ```
 
-Stage 2 - Get some Deprivation Data from the latest English Indices of Deprivation
+## Stage 2 - Get some Deprivation Data from the latest English Indices of Deprivation
+
+Now, I'm not convinced at all that taking the average of the LSOA IMD raw scores within an MSOA is the correct thing to do, but in the absence of the time to think about it properly, that's just what I'm going to do for now - will ponder it a bit more later.
 
 ```{r}
 #urgh, helpfully the government have put the data on the web in excel files rather than csv's and I've not figured out how to download excels directly from the web so a missing stage here which is download the IMD SCORE not rank file from here - https://www.gov.uk/government/statistics/english-indices-of-deprivation-2019 
@@ -118,13 +120,25 @@ msoa_vaccine <- msoa_vaccine %>%
 
 ```
 
-## Stage 4 - Generate some age-specific vaccination rates
-
-Now, these aren
+## Stage 4 - Download some MSOA boundaries
 
 ```{r}
-#now for some rates
+#get some boundaries from the ONS Geoportal. These are the super generalised ones so I don't melt all the ram in my computer. 
+url <- "https://opendata.arcgis.com/datasets/80223f1d571c405fb2fdf719c7e6da13_0.geojson"
 
+#read those boundaries into an sf() object for plotting
+UK_MSOA_sf <- geojson_sf(url)
+```
+
+# Analysis
+
+## Stage 1 - Generate some age-specific vaccination rates
+
+Now, these aren't perfect - the populations are estimates from 2019, but they're the best we have, so will go with it for now.
+
+```{r}
+
+#local vaccine proportions - not sure if these will be useful or not
 msoa_vaccine <- msoa_vaccine %>% 
   mutate(xUnder_60_prop = xUnder_60/total) %>%
   mutate(x60_64_prop = x60_64/total) %>% 
@@ -134,8 +148,10 @@ msoa_vaccine <- msoa_vaccine %>%
   mutate(x80_plus_prop = x80_plus/total) %>% 
   mutate(x60_plus_prop = x60_plus/total)
 
+#hacky update of a column, don't think I'll need it later anyway
 msoa_vaccine[6792,5] <- "Total"
 
+#local population proportions, again, not sure why I did this, but may come in useful later
 msoa_pop_grp <- msoa_pop_grp %>% 
   mutate(xUnder_60_prop = xUnder_60/total) %>%
   mutate(x60_64_prop = x60_64/total) %>% 
@@ -145,8 +161,10 @@ msoa_pop_grp <- msoa_pop_grp %>%
   mutate(x80_plus_prop = x80_plus/total )%>% 
   mutate(x60_plus_prop = x60_plus/total)
 
+#join the vaccine and population data together in the same file
 full_vaccine_pop <- left_join(msoa_vaccine, msoa_pop_grp, by = c("msoa_code" = "msoa_code"), suffix = c(".vac", ".pop"))
 
+#generate some age-specific vaccine rates
 full_vaccine_pop <- full_vaccine_pop %>% 
   mutate(xUnder_60_rate = xUnder_60.vac/xUnder_60.pop) %>%
   mutate(x60_64_rate = x60_64.vac/x60_64.pop) %>% 
@@ -156,18 +174,22 @@ full_vaccine_pop <- full_vaccine_pop %>%
   mutate(x80_plus_rate = x80_plus.vac/x80_plus.pop) %>% 
   mutate(x60_plus_rate = x60_plus.vac/x60_plus.pop)
 
+#OK, this is just dropping off the total column as I don't think I need it any more
 full_vaccine_pop_a <- full_vaccine_pop[1:6791,]
 
-sum(full_vaccine_pop_a$xUnder_60.vac)
+#sum(full_vaccine_pop_a$xUnder_60.vac)
 
+#generate a location quotient to show areas with above and below the national average vaccination rates
 full_vaccine_pop_a <- full_vaccine_pop_a %>% 
   mutate(xLQ_60_plus_vacc_rate = x60_plus_rate/(sum(x60_plus.vac)/sum(x60_plus.pop))) 
 
+#join the IMD data onto the vaccine rate file
 full_vaccine_pop_a <- full_vaccine_pop_a %>% 
   left_join(MSOA_IMD, by = c("msoa_code" = "MSOA11CD"))
 
 ```
 
+This code section below is just to generate some region-specific statistics. I may come back to these later but for now they are just for summary purposes.
 
 ```{r}
 #str(full_vaccine_pop)
@@ -224,14 +246,61 @@ region <- full_vaccine_pop_a %>%
   ) 
 ```
 
+## Stage 2 - Mapping and Data Visualisation
 
+First let's have a look at the data to see if it's behaving itself.
 
 ```{r}
-url <- "https://opendata.arcgis.com/datasets/80223f1d571c405fb2fdf719c7e6da13_0.geojson"
+#I'm going to make a bi-scale map later so let's put everything into a new data frame
+ew_biscale <- UK_MSOA_sf %>% 
+  merge(., full_vaccine_pop_a, 
+        by.x="MSOA11CD", 
+        by.y="msoa_code")
 
-#read those boundaries into an sf() object for plotting
-UK_MSOA_sf <- geojson_sf(url)
+ew_biscale <- ew_biscale %>% 
+  mutate(log_IMD = log(IMD_avg))
 ```
+
+Check the distributions of the variables
+
+```{r}
+ggplot(ew_biscale, aes(x60_plus_rate)) + 
+  geom_histogram()
+
+# some odd outliers at the low end - posh London I think. 
+ggplot(ew_biscale, aes(xLQ_60_plus_vacc_rate)) + 
+  geom_histogram()
+
+ggplot(ew_biscale, aes(IMD_avg)) + 
+  geom_histogram()
+
+#urgh a bit skewed - let's log it
+ggplot(ew_biscale, aes(log(IMD_avg))) + 
+  geom_histogram()
+```
+
+Check the relationship between deprivation and vaccination rate
+
+```{r}
+#x60_plus_rate
+#xLQ_60_plus_vacc_rate
+
+ggplot(ew_biscale, aes(x60_plus_rate, log(IMD_avg))) + 
+  geom_point(aes(colour=region_name)) + 
+  facet_wrap(vars(region_name))
+
+ggsave("facet_vaccine_scatter.png")
+
+ew_biscale %>% filter(region_name == "London") %>% 
+  ggplot(aes(xLQ_60_plus_vacc_rate, log(IMD_avg))) + 
+  geom_point(aes(colour=region_name))
+
+```
+These reveal quite a strong assocation between deprivation and vaccine uptake rate, however, some interesting non-linearities going on here, particularly in London, but in other places as well where there are some low vaccination uptake rates in some areas with relatively low levels of deprivation. Warrents some further investigation. 
+
+## Stage 3 - Map the shit out of it
+
+Yes, this is the bit we've all been waiting for, of course!
 
 ```{r}
 ew_biscale <- UK_MSOA_sf %>% 
@@ -264,42 +333,14 @@ finalPlot <- ggdraw() +
 finalPlot
 
 ggsave2("covid_plot.png",finalPlot, dpi = 1000)
+
 ```
+
+# Everything down here is just me messing around, but I don't want to delete the code yet. 
 
 ```{r}
 
-#x60_plus_rate
-#xLQ_60_plus_vacc_rate
-
-ggplot(ew_biscale, aes(x60_plus_rate, log(IMD_avg))) + 
-  geom_point(aes(colour=region_name)) + 
-  facet_wrap(vars(region_name))
-
-ew_biscale %>% filter(region_name == "London") %>% 
-  ggplot(aes(xLQ_60_plus_vacc_rate, log(IMD_avg))) + 
-  geom_point(aes(colour=region_name))
-
-ew_biscale %>% filter(region_name == "London") %>% 
-  ggplot(aes(xLQ_60_plus_vacc_rate, log(IMD_avg))) + 
-  geom_point(aes(colour=region_name))
-
 ```
-
-
-```{r}
-ggplot(ew_biscale, aes(x60_plus_rate)) + 
-  geom_histogram()
-
-ggplot(ew_biscale, aes(xLQ_60_plus_vacc_rate)) + 
-  geom_histogram()
-
-ggplot(ew_biscale, aes(log(IMD_avg))) + 
-  geom_histogram()
-
-
-```
-
-
 
 ```{r}
 tmap_mode("view")
@@ -312,13 +353,6 @@ tm_shape(ew_biscale) +
   )
 
 ```
-
-
-
-
-
-
-
 
 ```{r pressure, echo=FALSE}
 brent <- full_vaccine_pop_a %>% 
@@ -378,4 +412,3 @@ mf_inset_off()
 ```{r}
 
 ```
-
