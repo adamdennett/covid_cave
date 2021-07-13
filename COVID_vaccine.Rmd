@@ -53,12 +53,19 @@ msoa_pop <- clean_names(msoa_pop)
 #create some age groups to match those in the vaccination data
 msoa_pop <- msoa_pop %>% 
   mutate(xUnder_60 = rowSums(across(x0:x59))) %>%
+  mutate(x60_plus = rowSums(across(x60:x90))) %>% 
+  mutate(xUnder_25 = rowSums(across(x0:x24))) %>%
+  mutate(x25_29 = rowSums(across(x25:x29))) %>% 
+  mutate(x30_34 = rowSums(across(x30:x34))) %>% 
+  mutate(x35_39 = rowSums(across(x35:x39))) %>% 
+  mutate(x40_44 = rowSums(across(x40:x44))) %>% 
+  mutate(x50_54 = rowSums(across(x50:x54))) %>% 
+  mutate(x55_59 = rowSums(across(x55:x59))) %>% 
   mutate(x60_64 = rowSums(across(x60:x64))) %>% 
   mutate(x65_69 = rowSums(across(x65:x69))) %>% 
   mutate(x70_74 = rowSums(across(x70:x74))) %>% 
   mutate(x75_79 = rowSums(across(x75:x79))) %>% 
-  mutate(x80_plus = rowSums(across(x80:x90))) %>% 
-  mutate(x60_plus = rowSums(across(x60:x90)))
+  mutate(x80_plus = rowSums(across(x80:x90)))
 
 #add some labels
 msoa_pop_grp <- msoa_pop[,c("msoa_code", "msoa_name", "xUnder_60", "x60_64", "x65_69", "x70_74", "x75_79", "x80_plus", "x60_plus")]
@@ -246,7 +253,46 @@ region <- full_vaccine_pop_a %>%
   ) 
 ```
 
+```{r}
+vaccination_rates_08july21 <- read_csv("data/VaccinationRates08July21.csv")
+```
+
+
+
 ## Stage 2 - Mapping and Data Visualisation
+
+```{r}
+#new cheeky vaccination rate map here
+vac_map <- UK_MSOA_sf %>% 
+  merge(.,vaccination_rates_08july21,
+        by.x="MSOA11CD", 
+        by.y="msoa_code")
+
+ggplot(vac_map, aes(observed_vaccination_rate)) + 
+  geom_histogram()
+
+ggplot(vac_map, aes(age_standardised_vaccination_rate)) + 
+  geom_histogram()
+
+ggplot(vac_map, aes(standardised_vaccination_ratio)) + 
+  geom_histogram()
+
+
+tmap_mode("plot")
+tm_shape(vac_map) +
+  tm_polygons("standardised_vaccination_ratio", 
+    palette = "RdYlBu",
+    n = 4,
+    midpoint = 1,
+    alpha = 0.7, 
+    border.col = NA,
+    border.alpha = 0
+  )
+
+
+
+```
+
 
 First let's have a look at the data to see if it's behaving itself.
 
@@ -333,6 +379,7 @@ finalPlot <- ggdraw() +
 finalPlot
 
 ggsave2("covid_plot.png",finalPlot, dpi = 1000)
+
 
 ```
 
