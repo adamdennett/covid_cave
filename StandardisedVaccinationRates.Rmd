@@ -1,0 +1,201 @@
+---
+title: "Standardised Vaccination Rates"
+author: "Adam Dennett"
+date: "15/07/2021"
+output: html_document
+---
+
+Package Setup
+
+```{r cars}
+library(tidyverse)
+library(sf)
+library(geojsonio)
+library(tmap)
+library(downloader)
+library(readxl)
+library(janitor)
+library(mapsf)
+library(purrr)
+library(here)
+library(mapsf)
+library(biscale)
+library(cowplot)
+library(viridis)
+library(curl)
+```
+
+First job is to download some population data from the ONS for the rate denomenators. 
+
+```{r}
+#Get the latest MSOA population data from the ONS
+
+url <- "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/middlesuperoutputareamidyearpopulationestimates/mid2019sape22dt4/sape22dt4mid2019msoasyoaestimatesunformatted.zip"
+path_zip <- "C:/Users/Adam/OneDrive - University College London/GIS2020_21/covid_cave"
+path_unzip <- "C:/Users/Adam/OneDrive - University College London/GIS2020_21/covid_cave/vaccine"
+destfile <- "dataset.zip"
+
+# download zip
+curl_download(url, destfile = paste(path_zip, destfile, sep = "/"))
+
+#unzip into a new directory called data
+unzip("dataset.zip",exdir="./vaccine")
+
+#get the file names from within the zip file
+filename <- list.files("./vaccine")
+
+#read the sheet you want from the file
+msoa_pop <- read_excel(file.path("./vaccine",filename), sheet="Mid-2019 Persons", skip = 3, col_names = T)
+
+#sort the headers out
+msoa_pop <- clean_names(msoa_pop)
+
+#create some age groups to match those in the vaccination data
+msoa_pop <- msoa_pop %>% 
+  mutate(xUnder_25 = rowSums(across(x0:x24))) %>%
+  mutate(x25_29 = rowSums(across(x25:x29))) %>% 
+  mutate(x30_34 = rowSums(across(x30:x34))) %>% 
+  mutate(x35_39 = rowSums(across(x35:x39))) %>% 
+  mutate(x40_44 = rowSums(across(x40:x44))) %>% 
+  mutate(x45_49 = rowSums(across(x45:x49))) %>% 
+  mutate(x50_54 = rowSums(across(x50:x54))) %>% 
+  mutate(x55_59 = rowSums(across(x55:x59))) %>% 
+  mutate(x60_64 = rowSums(across(x60:x64))) %>% 
+  mutate(x65_69 = rowSums(across(x65:x69))) %>% 
+  mutate(x70_74 = rowSums(across(x70:x74))) %>% 
+  mutate(x75_79 = rowSums(across(x75:x79))) %>% 
+  mutate(x80_plus = rowSums(across(x80:x90)))
+
+#add some labels
+msoa_pop_grp <- msoa_pop[,c("msoa_code", "msoa_name", "xUnder_25","x25_29","x30_34","x35_39","x40_44","x45_49" ,"x50_54","x55_59","x60_64", "x65_69", "x70_74", "x75_79", "x80_plus")]
+
+#Filter out the Welsh - there's also some commented code in here for adding totals, but I won't bother for now
+msoa_pop_grp <- msoa_pop_grp %>% 
+  #mutate(total = rowSums(across(xUnder_25:x80_plus))) %>% 
+  arrange(by_group = msoa_code) %>% 
+  filter(str_detect(msoa_code, "^E"))
+  #add column totals too? not sure. OK, will do it. 
+  #adorn_totals()
+
+#standard_eng_pop <- as.data.frame(rbind(c("msoa_code", "msoa_name", "xUnder_25","x25_29","x30_34","x35_39","x40_44","x45_49" ,"x50_54","x55_59","x60_64", "x65_69", "x70_74", "x75_79", "x80_plus"),c("EngCode", "England",colMeans(msoa_pop_grp[3:15])))) %>% row_to_names(row_number = 1)
+
+#this bit of code creates a Standard Population which is the national age structure against which we are going to standardise. Here, I'm just taking the average (mean) population found in MSOAs across England. It could really be anything, although I think the order of magnitude matters. 
+std_eng_pop <- as.data.frame(colMeans(msoa_pop_grp[3:15])) %>% 
+  rownames_to_column() %>% 
+  set_names("age", "Avg_Eng_MSOA_Pop")
+
+#now create a tidy version of the data
+popdata <- msoa_pop_grp %>% 
+  pivot_longer(c(3:15), names_to = "age", values_to = "population")
+
+```
+
+Second job is to get some vaccination data - borrowed this bit of code from @victimofmaths as I did it manually (i.e. in Excel) earlier (slaps wrist with an R-shaped slapping paddle)!
+
+```{r}
+#Download vaccination data by MSOA
+#https://www.england.nhs.uk/statistics/statistical-work-areas/covid-19-vaccinations/
+maxdate <- "4th July"
+
+vax <- tempfile()
+url <- "https://www.england.nhs.uk/statistics/wp-content/uploads/sites/2/2021/07/COVID-19-weekly-announced-vaccinations-08-July-2021.xlsx"
+vax <- curl_download(url=url, destfile=vax, quiet=FALSE, mode="wb")
+
+vaxdata <- read_excel(vax, sheet="MSOA", range="F16:AH6806", col_names=FALSE) %>% 
+  set_names("msoa11cd", "msoa11nm", "<25_1st", "25-29_1st", "30-34_1st", "35-39_1st", "40-44_1st", 
+            "45-49_1st", "50-54_1st", "55-59_1st", "60-64_1st", "65-69_1st", "70-74_1st", 
+            "75-79_1st", "80+_1st", "blank", "<25_2nd", "25-29_2nd", "30-34_2nd", "35-39_2nd", "40-44_2nd", 
+            "45-49_2nd", "50-54_2nd", "55-59_2nd", "60-64_2nd", "65-69_2nd", "70-74_2nd", 
+            "75-79_2nd", "80+_2nd") %>% 
+  select(-blank) %>% arrange(by_group = msoa11cd) %>% 
+  pivot_longer(c(3:28), names_to=c("age", "dose"), names_sep="_", values_to="vaccinated")
+
+vaxdata_raw <- read_excel(vax, sheet="MSOA", range="F16:AH6806", col_names=FALSE) %>% 
+  set_names("msoa11cd", "msoa11nm", "<25_1st", "25-29_1st", "30-34_1st", "35-39_1st", "40-44_1st", 
+            "45-49_1st", "50-54_1st", "55-59_1st", "60-64_1st", "65-69_1st", "70-74_1st", 
+            "75-79_1st", "80+_1st", "blank", "<25_2nd", "25-29_2nd", "30-34_2nd", "35-39_2nd", "40-44_2nd", 
+            "45-49_2nd", "50-54_2nd", "55-59_2nd", "60-64_2nd", "65-69_2nd", "70-74_2nd", 
+            "75-79_2nd", "80+_2nd") %>% arrange(by_group = msoa11cd) %>% select(-blank)
+
+vaxdata_1st_raw <- vaxdata_raw[,c(1:15)] %>% 
+  set_names("msoa_code", "msoa_name", "xUnder_25","x25_29","x30_34","x35_39","x40_44","x45_49" ,"x50_54","x55_59","x60_64", "x65_69", "x70_74", "x75_79", "x80_plus")
+
+vaxdata_2nd_raw <- vaxdata_raw[,c(1,2,16:28)] %>% 
+  set_names("msoa_code", "msoa_name", "xUnder_25","x25_29","x30_34","x35_39","x40_44","x45_49" ,"x50_54","x55_59","x60_64", "x65_69", "x70_74", "x75_79", "x80_plus")
+
+vaxdata_1st <- vaxdata_1st_raw %>% 
+  pivot_longer(c(3:15), names_to=c("age"), values_to="vaccinated")
+
+vaxdata_2nd <- vaxdata_2nd_raw %>% 
+  pivot_longer(c(3:15), names_to=c("age"), values_to="vaccinated")
+    
+```
+
+Now we can calculate the standardised vaccination rates and ratios using the direct standardisation method. The code below is just looking at 1st dose - although will work the same with the 2nd dose file above. 
+
+```{r}
+#get the local age specific vaccination rates
+vax_rates_1st <- left_join(vaxdata_1st, popdata, by = c("msoa_code","age")) %>% 
+  select(-msoa_name.y) %>% 
+  mutate(vax_rate = vaccinated / population)
+
+#Join the standard population to the observed data
+vax_rates_1st <- left_join(vax_rates_1st, std_eng_pop, by = "age") 
+
+#generate an expected vaccination count by multiplying the observed local rate by the standard population
+vax_rates_1st <- vax_rates_1st %>% 
+  mutate(exp_vax = vax_rate * Avg_Eng_MSOA_Pop)
+
+#now sum the expected vaccination counts for each MSOA and while we're here, calculate the observed local vaccination rate, a standardised local vaccination rate and a standardised ratio for each MSOA
+Exp_Total_Vax <- vax_rates_1st %>% 
+  group_by(msoa_code) %>% 
+  summarise(vaccinated_sum = sum(vaccinated), population_sum = sum(population),  exp_vax_sum = sum(exp_vax)) %>%
+  mutate(obs_vax_rate = vaccinated_sum / population_sum) %>% 
+  mutate(std_vax_rate = exp_vax_sum / sum(std_eng_pop[2])) %>% 
+  mutate(std_vax_ratio = obs_vax_rate / std_vax_rate)
+   
+```
+
+Now map the data to see what it reveals!
+
+```{r}
+#get some boundaries from the ONS Geoportal. These are the super generalised ones so I don't melt all the ram in my computer. 
+url <- "https://opendata.arcgis.com/datasets/80223f1d571c405fb2fdf719c7e6da13_0.geojson"
+
+#read those boundaries into an sf() object for plotting
+UK_MSOA_sf <- geojson_sf(url)
+```
+
+Map the shit out of it!
+
+```{r}
+#new cheeky vaccination rate map here
+vac_map <- UK_MSOA_sf %>% 
+  merge(.,Exp_Total_Vax,
+        by.x="MSOA11CD", 
+        by.y="msoa_code")
+
+ggplot(vac_map, aes(obs_vax_rate)) + 
+  geom_histogram()
+
+ggplot(vac_map, aes(std_vax_rate)) + 
+  geom_histogram()
+
+ggplot(vac_map, aes(std_vax_ratio)) + 
+  geom_histogram()
+
+
+tmap_mode("view")
+map <- tm_shape(vac_map) +
+  tm_polygons("std_vax_ratio", 
+    palette = "RdYlBu",
+    n = 4,
+    midpoint = 1,
+    alpha = 0.7, 
+    border.col = NA,
+    border.alpha = 0
+  )
+
+tmap_save(map, "vac_map.html")
+
+```
