@@ -198,4 +198,5 @@ map <- tm_shape(vac_map) +
 
 tmap_save(map, "vac_map.html")
 
+map
 ```
