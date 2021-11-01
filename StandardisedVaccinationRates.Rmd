@@ -2,7 +2,10 @@
 title: "Standardised Vaccination Rates"
 author: "Adam Dennett"
 date: "15/07/2021"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
+  always_allow_html: true
 ---
 
 Package Setup
@@ -29,10 +32,10 @@ First job is to download some population data from the ONS for the rate denomena
 
 ```{r}
 #Get the latest MSOA population data from the ONS
-
+here()
 url <- "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/middlesuperoutputareamidyearpopulationestimates/mid2019sape22dt4/sape22dt4mid2019msoasyoaestimatesunformatted.zip"
-path_zip <- "C:/Users/Adam/OneDrive - University College London/GIS2020_21/covid_cave"
-path_unzip <- "C:/Users/Adam/OneDrive - University College London/GIS2020_21/covid_cave/vaccine"
+path_zip <- here()
+path_unzip <- here("vaccine")
 destfile <- "dataset.zip"
 
 # download zip
